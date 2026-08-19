@@ -103,19 +103,15 @@ try:
     print(f"[PipelineMonitor] Policy loaded: {policy_file}")
 
 except Exception as _e:
-    print(f"[PipelineMonitor] WARNING: policy file not found ({_e}). Using hardcoded defaults.")
-    policy = {
-        "confidence_threshold": 0.70,
-        "max_auto_reruns_per_job_per_day": 3,
-        "polling_lookback_minutes": 15,
-        "safe_actions": ["RERUN"],
-        "llm_model": "databricks-gpt-5-2",
-        "audit_catalog": f"uc_{env}_snt_mosaic_01",
-        "audit_schema": "mosaic_audit"
-    }
+    error_msg = f"[PipelineMonitor] FATAL: Policy file not found at {policy_file}. Please ensure the configuration file exists. Error: {_e}"
+    print(error_msg)
+    raise RuntimeError(error_msg) from _e
 
-audit_catalog = policy.get("audit_catalog", f"uc_{env}_snt_mosaic_01")
-audit_schema  = policy.get("audit_schema",  "mosaic_audit")
+audit_catalog = policy.get("audit_catalog")
+audit_schema  = policy.get("audit_schema")
+
+if not audit_catalog or not audit_schema:
+    raise ValueError("[PipelineMonitor] FATAL: audit_catalog and audit_schema must be defined in the policy file.")
 
 print(f"[PipelineMonitor] Audit target: {audit_catalog}.{audit_schema}")
 print(f"[PipelineMonitor] Guardrails:   confidence≥{policy['confidence_threshold']}  max_reruns={policy['max_auto_reruns_per_job_per_day']}/day")

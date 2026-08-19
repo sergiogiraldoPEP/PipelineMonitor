@@ -1,0 +1,9 @@
+{
+  "confidence_threshold": 0.70,
+  "max_auto_reruns_per_job_per_day": 3,
+  "polling_lookback_minutes": 15,
+  "safe_actions": ["RERUN"],
+  "llm_model": "databricks-gpt-5-2",
+  "audit_catalog": "uc_dev_cgf_mdip_01",
+  "audit_schema": "mosaic_audit"
+}
