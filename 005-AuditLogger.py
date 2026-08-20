@@ -63,7 +63,7 @@ _LOG_SCHEMA = StructType([
     StructField("CreatedAt",        TimestampType(), True)
 ])
 
-audit_table = f"{audit_catalog}.{audit_schema}.AgentActionLog"
+audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
 now_utc = datetime.now(timezone.utc)
 
 # COMMAND ----------

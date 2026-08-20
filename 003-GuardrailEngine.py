@@ -39,7 +39,7 @@
 confidence_threshold = float(policy.get("confidence_threshold", 0.70))
 max_reruns = int(policy.get("max_auto_reruns_per_job_per_day", 3))
 safe_actions = policy.get("safe_actions", ["RERUN"])
-audit_table = f"{audit_catalog}.{audit_schema}.AgentActionLog"
+audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
 
 # COMMAND ----------
 

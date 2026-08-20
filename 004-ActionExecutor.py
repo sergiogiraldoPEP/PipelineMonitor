@@ -44,7 +44,7 @@ import uuid
 
 w = WorkspaceClient()
 dry_run = dbutils.widgets.get("dry_run").strip().lower() == "true"
-approval_table = f"{audit_catalog}.{audit_schema}.AgentApprovalQueue"
+approval_table = f"{audit_catalog}.{audit_schema}.{approval_table_name}"
 
 if dry_run:
     print("[ActionExecutor] DRY RUN mode — no reruns will be triggered, no queue rows written")

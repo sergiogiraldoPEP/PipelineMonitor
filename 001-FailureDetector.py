@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 w = WorkspaceClient()
 
 lookback_min = policy.get("polling_lookback_minutes", 15)
-audit_table = f"{audit_catalog}.{audit_schema}.AgentActionLog"
+audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
 
 # COMMAND ----------
 # Step 1 — Find failed runs in the lookback window, join to get failing task key

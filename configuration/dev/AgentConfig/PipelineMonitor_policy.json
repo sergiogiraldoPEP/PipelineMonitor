@@ -5,5 +5,7 @@
   "safe_actions": ["RERUN"],
   "llm_model": "databricks-gpt-5-2",
   "audit_catalog": "uc_dev_cgf_mdip_01",
-  "audit_schema": "mosaic_audit"
+  "audit_schema": "mosaic_audit",
+  "audit_table_name": "AgentActionLog",
+  "approval_table_name": "AgentApprovalQueue"
 }

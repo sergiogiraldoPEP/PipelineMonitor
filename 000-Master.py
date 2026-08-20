@@ -109,11 +109,14 @@ except Exception as _e:
 
 audit_catalog = policy.get("audit_catalog")
 audit_schema  = policy.get("audit_schema")
+audit_table_name = policy.get("audit_table_name", "AgentActionLog")
+approval_table_name = policy.get("approval_table_name", "AgentApprovalQueue")
 
 if not audit_catalog or not audit_schema:
     raise ValueError("[PipelineMonitor] FATAL: audit_catalog and audit_schema must be defined in the policy file.")
 
 print(f"[PipelineMonitor] Audit target: {audit_catalog}.{audit_schema}")
+print(f"[PipelineMonitor] Tables: {audit_table_name}, {approval_table_name}")
 print(f"[PipelineMonitor] Guardrails:   confidence≥{policy['confidence_threshold']}  max_reruns={policy['max_auto_reruns_per_job_per_day']}/day")
 
 # COMMAND ----------
