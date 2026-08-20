@@ -19,7 +19,7 @@
 # MAGIC | `execution_results` | List from 004-ActionExecutor |
 # MAGIC
 # MAGIC ### Output
-# MAGIC - Rows written/merged to `{audit_catalog}.{audit_schema}.AgentActionLog`
+# MAGIC - Rows written/merged to `{audit_catalog}.{audit_schema}.AgentActionLog` with CountryCode column for easy filtering
 # MAGIC
 # MAGIC ### History
 # MAGIC
@@ -47,6 +47,7 @@ _LOG_SCHEMA = StructType([
     StructField("EventId",          StringType(),    True),
     StructField("JobId",            StringType(),    True),
     StructField("JobName",          StringType(),    True),
+    StructField("CountryCode",      StringType(),    True),
     StructField("RunId",            StringType(),    True),
     StructField("TaskKey",          StringType(),    True),
     StructField("FailureType",      StringType(),    True),
@@ -75,6 +76,7 @@ else:
             r.get("event_id"),
             r.get("job_id"),
             r.get("job_name"),
+            r.get("country_code"),
             r.get("run_id"),
             r.get("task_key"),
             r.get("failure_type"),
@@ -115,4 +117,4 @@ else:
         print(f"[AuditLogger] Appended {len(log_rows)} row(s) to {audit_table}")
 
     for r in execution_results:
-        print(f"  [{r.get('final_status'):<28}] {r.get('job_name')}  EventId={r.get('event_id')}")
+        print(f"  [{r.get('final_status'):<28}] [{r.get('country_code')}] {r.get('job_name')}  EventId={r.get('event_id')}")

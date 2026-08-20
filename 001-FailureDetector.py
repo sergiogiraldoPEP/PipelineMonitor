@@ -21,7 +21,7 @@
 # MAGIC | `audit_schema` | Schema name (e.g. `mosaic_audit`) |
 # MAGIC
 # MAGIC ### Output
-# MAGIC - `detected_failures` — list of dicts, one per unhandled failed run
+# MAGIC - `detected_failures` — list of dicts, one per unhandled failed run; includes `country_code` extracted from job name prefix
 # MAGIC
 # MAGIC ### History
 # MAGIC
@@ -107,9 +107,13 @@ for row in new_failures:
     except Exception:
         error_message = str(row["termination_code"]) or "unknown error"
 
+    # Extract country code from first 2 letters of job name
+    country_code = job_name[:2].upper() if len(job_name) >= 2 else "XX"
+
     detected_failures.append({
         "job_id": job_id,
         "job_name": job_name,
+        "country_code": country_code,
         "run_id": run_id,
         "task_key": row["task_key"],
         "result_state": row["result_state"],
