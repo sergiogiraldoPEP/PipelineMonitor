@@ -31,7 +31,7 @@
 # MAGIC
 # MAGIC ### One-Time Setup
 # MAGIC 1. Run `scripts/agent_ddl.sql` in DBSQL to create `AgentActionLog` and `AgentApprovalQueue`
-# MAGIC 2. Grant system table access: `GRANT SELECT ON SCHEMA system.lakeflow TO <cluster-principal>`
+# MAGIC 2. Ensure cluster has Databricks workspace API access (no additional permissions needed)
 # MAGIC
 # MAGIC ### History
 # MAGIC
@@ -94,7 +94,7 @@ print(f"[PipelineMonitor] env={env}  dry_run={dry_run}  time={datetime.now(timez
 try:
     ctx           = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
     notebook_path = ctx.notebookPath().get()
-    repo_root     = "/Workspace" + "/".join(notebook_path.split("/")[:-4])
+    repo_root     = "/Workspace" + "/".join(notebook_path.split("/")[:-1])
     policy_file   = f"{repo_root}/configuration/{env}/AgentConfig/PipelineMonitor_policy.json"
 
     with open(policy_file, "r") as _f:

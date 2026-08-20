@@ -7,8 +7,8 @@
 # MAGIC
 # MAGIC ### Overview
 # MAGIC
-# MAGIC Reads `system.lakeflow.job_run_timeline` and `system.lakeflow.job_task_run_timeline`
-# MAGIC for failed runs in the last N minutes. Enriches each failure with job name and
+# MAGIC Reads failed job runs from the Databricks Jobs API using the WorkspaceClient.
+# MAGIC Filters for failed runs within the lookback window and enriches each failure with job name and
 # MAGIC full error message text from the Databricks Jobs API.
 # MAGIC Anti-joins against `AgentActionLog` to skip already-processed runs.
 # MAGIC
@@ -42,29 +42,48 @@ lookback_min = policy.get("polling_lookback_minutes", 15)
 audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
 
 # COMMAND ----------
-# Step 1 — Find failed runs in the lookback window, join to get failing task key
+# Step 1 — Find failed runs in the lookback window using Databricks Jobs API
 
-failed_runs_df = spark.sql(f"""
-    SELECT
-        jrt.job_id,
-        jrt.run_id,
-        jrt.result_state,
-        jrt.termination_code,
-        jrt.period_end_time,
-        jrt.trigger_type,
-        jrt.run_name,
-        COALESCE(
-            FIRST(jtrt.task_key) OVER (PARTITION BY jrt.run_id ORDER BY jtrt.period_end_time),
-            'unknown_task'
-        ) AS task_key
-    FROM system.lakeflow.job_run_timeline jrt
-    LEFT JOIN system.lakeflow.job_task_run_timeline jtrt
-        ON jrt.job_id = jtrt.job_id
-        AND jrt.run_id = jtrt.job_run_id
-        AND jtrt.result_state IN ('FAILED', 'TIMEDOUT')
-    WHERE jrt.result_state IN ('FAILED', 'TIMEDOUT')
-    AND jrt.period_end_time >= NOW() - INTERVAL {lookback_min} MINUTES
-""").dropDuplicates(["run_id"])
+from datetime import datetime, timedelta
+
+lookback_cutoff = datetime.now(timezone.utc) - timedelta(minutes=lookback_min)
+failed_runs_data = []
+
+# Fetch completed runs from Jobs API
+for run in w.jobs.list_runs(completed_only=True, expand_tasks=True):
+    run_end_time = run.end_time / 1000 if run.end_time else None
+    
+    # Filter by result state and lookback window
+    if run.state and run.state.result_state:
+        result_state = str(run.state.result_state.name)
+        if result_state in ("FAILED", "TIMEDOUT"):
+            # Check if run is within lookback window
+            if run_end_time:
+                run_end_dt = datetime.fromtimestamp(run_end_time, tz=timezone.utc)
+                if run_end_dt >= lookback_cutoff:
+                    # Extract first failed task key if available
+                    task_key = "unknown_task"
+                    if run.tasks:
+                        for task in run.tasks:
+                            if task.state and task.state.result_state:
+                                task_result = str(task.state.result_state.name)
+                                if task_result in ("FAILED", "TIMEDOUT"):
+                                    task_key = task.task_key or "unknown_task"
+                                    break
+                    
+                    failed_runs_data.append({
+                        "job_id": run.job_id,
+                        "run_id": run.run_id,
+                        "result_state": result_state,
+                        "termination_code": run.state.state_message or None,
+                        "period_end_time": run_end_time,
+                        "trigger_type": str(run.trigger.trigger_type.name) if run.trigger else "MANUAL",
+                        "run_name": run.run_name or f"run_{run.run_id}",
+                        "task_key": task_key
+                    })
+
+# Convert to DataFrame
+failed_runs_df = spark.createDataFrame(failed_runs_data).dropDuplicates(["run_id"]) if failed_runs_data else spark.createDataFrame([], schema="job_id long, run_id long, result_state string, termination_code string, period_end_time long, trigger_type string, run_name string, task_key string")
 
 # COMMAND ----------
 # Step 2 — Anti-join against already-handled runs to avoid reprocessing
