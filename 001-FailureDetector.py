@@ -31,6 +31,8 @@
 
 # COMMAND ----------
 
+import json
+
 from databricks.sdk import WorkspaceClient
 from datetime import datetime, timezone
 
@@ -49,7 +51,7 @@ from datetime import datetime, timedelta
 failed_runs_data = []
 
 def failed_run_record(run):
-    """Return the detector record for a failed or timed-out run, or None."""
+    """Return the detector record for a failed run, including failed task output."""
     if not run.state or not run.state.result_state:
         return None
 
@@ -57,14 +59,40 @@ def failed_run_record(run):
     if result_state not in ("FAILED", "TIMEDOUT"):
         return None
 
-    task_key = "unknown_task"
+    failed_tasks = []
     if run.tasks:
         for task in run.tasks:
             if task.state and task.state.result_state:
                 task_result = str(task.state.result_state.name)
-                if task_result in ("FAILED", "TIMEDOUT"):
-                    task_key = task.task_key or "unknown_task"
-                    break
+                if task_result in ("FAILED", "TERMINATED", "UPSTREAM_FAILED"):
+                    task_output = {}
+                    if task.run_id:
+                        try:
+                            output = w.jobs.get_run_output(run_id=task.run_id)
+                            task_output = {
+                                "error": getattr(output, "error", None),
+                                "error_trace": getattr(output, "error_trace", None),
+                                "logs": getattr(output, "logs", None)
+                            }
+                        except Exception as exc:
+                            task_output = {"output_fetch_error": str(exc)}
+
+                    failed_tasks.append({
+                        "task_run_id": task.run_id,
+                        "task_key": task.task_key or "unknown_task",
+                        "result_state": task_result,
+                        **task_output
+                    })
+
+    if not failed_tasks:
+        failed_tasks = [{
+            "task_run_id": None,
+            "task_key": "unknown_task",
+            "result_state": result_state,
+            "error": None,
+            "error_trace": None,
+            "logs": None
+        }]
 
     run_end_time = run.end_time / 1000 if run.end_time else None
     return {
@@ -75,7 +103,8 @@ def failed_run_record(run):
         "period_end_time": run_end_time,
         "trigger_type": str(run.trigger.name) if run.trigger else "MANUAL",
         "run_name": run.run_name or f"run_{run.run_id}",
-        "task_key": task_key
+        "task_key": ", ".join(task["task_key"] for task in failed_tasks),
+        "task_error_context": json.dumps(failed_tasks, default=str)
     }
 
 
@@ -104,7 +133,7 @@ else:
                 failed_runs_data.append(record)
 
 # Convert to DataFrame
-failed_runs_df = spark.createDataFrame(failed_runs_data).dropDuplicates(["run_id"]) if failed_runs_data else spark.createDataFrame([], schema="job_id long, run_id long, result_state string, termination_code string, period_end_time long, trigger_type string, run_name string, task_key string")
+failed_runs_df = spark.createDataFrame(failed_runs_data).dropDuplicates(["run_id"]) if failed_runs_data else spark.createDataFrame([], schema="job_id long, run_id long, result_state string, termination_code string, period_end_time long, trigger_type string, run_name string, task_key string, task_error_context string")
 
 # COMMAND ----------
 # Step 2 — Anti-join against already-handled runs to avoid reprocessing
@@ -137,15 +166,8 @@ for row in new_failures:
     except Exception as e:
         job_name = f"job_{job_id}"
 
-    try:
-        run_details = w.jobs.runs.get(run_id=int(run_id))
-        error_message = (
-            run_details.state.state_message
-            if run_details.state and run_details.state.state_message
-            else str(row["termination_code"])
-        )
-    except Exception:
-        error_message = str(row["termination_code"]) or "unknown error"
+    task_error_context = row["task_error_context"]
+    error_message = task_error_context or str(row["termination_code"]) or "unknown error"
 
     # Extract country code from first 2 letters of job name
     country_code = job_name[:2].upper() if len(job_name) >= 2 else "XX"
@@ -159,6 +181,7 @@ for row in new_failures:
         "result_state": row["result_state"],
         "termination_code": str(row["termination_code"]) if row["termination_code"] else None,
         "error_message": error_message,
+        "task_error_context": task_error_context,
         "detected_at": datetime.now(timezone.utc).isoformat()
     })
 
