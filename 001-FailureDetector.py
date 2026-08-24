@@ -42,45 +42,66 @@ lookback_min = policy.get("polling_lookback_minutes", 15)
 audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
 
 # COMMAND ----------
-# Step 1 — Find failed runs in the lookback window using Databricks Jobs API
+# Step 1 — Find failed runs using the requested mode
 
 from datetime import datetime, timedelta
 
-lookback_cutoff = datetime.now(timezone.utc) - timedelta(minutes=lookback_min)
 failed_runs_data = []
 
-# Fetch completed runs from Jobs API
-for run in w.jobs.list_runs(completed_only=True, expand_tasks=True):
+def failed_run_record(run):
+    """Return the detector record for a failed or timed-out run, or None."""
+    if not run.state or not run.state.result_state:
+        return None
+
+    result_state = str(run.state.result_state.name)
+    if result_state not in ("FAILED", "TIMEDOUT"):
+        return None
+
+    task_key = "unknown_task"
+    if run.tasks:
+        for task in run.tasks:
+            if task.state and task.state.result_state:
+                task_result = str(task.state.result_state.name)
+                if task_result in ("FAILED", "TIMEDOUT"):
+                    task_key = task.task_key or "unknown_task"
+                    break
+
     run_end_time = run.end_time / 1000 if run.end_time else None
-    
-    # Filter by result state and lookback window
-    if run.state and run.state.result_state:
-        result_state = str(run.state.result_state.name)
-        if result_state in ("FAILED", "TIMEDOUT"):
-            # Check if run is within lookback window
-            if run_end_time:
-                run_end_dt = datetime.fromtimestamp(run_end_time, tz=timezone.utc)
-                if run_end_dt >= lookback_cutoff:
-                    # Extract first failed task key if available
-                    task_key = "unknown_task"
-                    if run.tasks:
-                        for task in run.tasks:
-                            if task.state and task.state.result_state:
-                                task_result = str(task.state.result_state.name)
-                                if task_result in ("FAILED", "TIMEDOUT"):
-                                    task_key = task.task_key or "unknown_task"
-                                    break
-                    
-                    failed_runs_data.append({
-                        "job_id": run.job_id,
-                        "run_id": run.run_id,
-                        "result_state": result_state,
-                        "termination_code": run.state.state_message or None,
-                        "period_end_time": run_end_time,
-                        "trigger_type": str(run.trigger.trigger_type.name) if run.trigger else "MANUAL",
-                        "run_name": run.run_name or f"run_{run.run_id}",
-                        "task_key": task_key
-                    })
+    return {
+        "job_id": run.job_id,
+        "run_id": run.run_id,
+        "result_state": result_state,
+        "termination_code": run.state.state_message or None,
+        "period_end_time": run_end_time,
+        "trigger_type": str(run.trigger.name) if run.trigger else "MANUAL",
+        "run_name": run.run_name or f"run_{run.run_id}",
+        "task_key": task_key
+    }
+
+
+if run_id:
+    try:
+        target_run_id = int(run_id)
+    except ValueError as exc:
+        raise ValueError(f"[FailureDetector] run_id must be a numeric Databricks run ID, got '{run_id}'") from exc
+
+    print(f"[FailureDetector] Targeted mode — fetching run_id={target_run_id}")
+    target_run = w.jobs.get_run(run_id=target_run_id)
+    targeted_record = failed_run_record(target_run)
+    if targeted_record:
+        failed_runs_data.append(targeted_record)
+    else:
+        print(f"[FailureDetector] Run {target_run_id} is not FAILED or TIMEDOUT; nothing to process")
+else:
+    lookback_cutoff = datetime.now(timezone.utc) - timedelta(minutes=lookback_min)
+
+    # Fetch completed runs from Jobs API within the configured lookback window.
+    for run in w.jobs.list_runs(completed_only=True, expand_tasks=True):
+        record = failed_run_record(run)
+        if record and record["period_end_time"]:
+            run_end_dt = datetime.fromtimestamp(record["period_end_time"], tz=timezone.utc)
+            if run_end_dt >= lookback_cutoff:
+                failed_runs_data.append(record)
 
 # Convert to DataFrame
 failed_runs_df = spark.createDataFrame(failed_runs_data).dropDuplicates(["run_id"]) if failed_runs_data else spark.createDataFrame([], schema="job_id long, run_id long, result_state string, termination_code string, period_end_time long, trigger_type string, run_name string, task_key string")

@@ -73,11 +73,11 @@ from datetime import datetime, timezone
 
 dbutils.widgets.text("env",      "dev",  "Environment (dev / qa / prod)")
 dbutils.widgets.text("dry_run",  "True", "Dry Run — True prevents any live reruns")
-dbutils.widgets.text("job_id",   "",     "Job ID (injected by Databricks scheduler)")
+dbutils.widgets.text("run_id",   "",     "Run ID (optional targeted failure run)")
 
 env      = dbutils.widgets.get("env").strip().lower()
 dry_run  = dbutils.widgets.get("dry_run").strip()
-job_id   = dbutils.widgets.get("job_id").strip()
+run_id   = dbutils.widgets.get("run_id").strip()
 
 print(f"[PipelineMonitor] ── Cycle start ──────────────────────────────────────────")
 print(f"[PipelineMonitor] env={env}  dry_run={dry_run}  time={datetime.now(timezone.utc).isoformat()}")
