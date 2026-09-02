@@ -7,5 +7,14 @@
   "audit_catalog": "uc_dev_cgf_mdip_01",
   "audit_schema": "sdna_test",
   "audit_table_name": "sdna_audit_agent_action_log_test",
-  "approval_table_name": "sdna_audit_agent_approval_queue_test"
+  "approval_table_name": "sdna_audit_agent_approval_queue_test",
+  "notebook_patch_enabled" : "true",
+  "ado_org": "PepsiCoIT",
+  "ado_project": "Europe_Advanced_Analytics_Data_Engineering",
+  "ado_rep": "sDNA",
+  "ado_base_branch": "test/sDNA_Pipeline_Monitor",
+  "ado_secret_scope": "sdna_v3_repo_connect",
+  "ado_secret_key": "",
+  "notebook_path_prefix_d":   "",
+  "notebook_path_prefix_repo": ""
 }
