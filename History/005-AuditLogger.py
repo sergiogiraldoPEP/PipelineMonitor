@@ -118,3 +118,4 @@ else:
 
     for r in execution_results:
         print(f"  [{r.get('final_status'):<28}] [{r.get('country_code')}] {r.get('job_name')}  EventId={r.get('event_id')}")
+

@@ -143,3 +143,4 @@ for failure in detected_failures:
         f"→ {classification['recommended_action']}"
     )
     print(f"              {classification['rationale']}")
+

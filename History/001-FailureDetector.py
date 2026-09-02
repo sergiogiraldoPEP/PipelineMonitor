@@ -190,3 +190,4 @@ for row in new_failures:
 print(f"[FailureDetector] Detected {len(detected_failures)} new unhandled failure(s)")
 for f in detected_failures:
     print(f"  job={f['job_name']}  run_id={f['run_id']}  termination={f['termination_code']}")
+

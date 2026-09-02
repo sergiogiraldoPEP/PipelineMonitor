@@ -178,3 +178,4 @@ print(f"[PipelineMonitor] Reruns triggered:  {_auto}")
 print(f"[PipelineMonitor] Pending approval:  {_pending}")
 print(f"[PipelineMonitor] Blocked:           {_blocked}")
 print(f"[PipelineMonitor] Total processed:   {len(execution_results)}")
+
