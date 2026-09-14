@@ -19,7 +19,7 @@
 # MAGIC | `execution_results` | List from 004-ActionExecutor |
 # MAGIC
 # MAGIC ### Output
-# MAGIC - Rows written/merged to `{audit_catalog}.{audit_schema}.AgentActionLog` with CountryCode column for easy filtering
+# MAGIC - Rows written/merged to `{audit_catalog}.{audit_schema}.AgentActionLog`
 # MAGIC
 # MAGIC ### History
 # MAGIC
@@ -47,7 +47,6 @@ _LOG_SCHEMA = StructType([
     StructField("EventId",          StringType(),    True),
     StructField("JobId",            StringType(),    True),
     StructField("JobName",          StringType(),    True),
-    StructField("CountryCode",      StringType(),    True),
     StructField("RunId",            StringType(),    True),
     StructField("TaskKey",          StringType(),    True),
     StructField("FailureType",      StringType(),    True),
@@ -55,6 +54,7 @@ _LOG_SCHEMA = StructType([
     StructField("ErrorMessage",     StringType(),    True),
     StructField("Confidence",       DoubleType(),    True),
     StructField("RecommendedAction",StringType(),    True),
+    StructField("FixApplied",       StringType(),    True),
     StructField("ActionTier",       StringType(),    True),
     StructField("AutoExecuted",     BooleanType(),   True),
     StructField("Status",           StringType(),    True),
@@ -63,7 +63,7 @@ _LOG_SCHEMA = StructType([
     StructField("CreatedAt",        TimestampType(), True)
 ])
 
-audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
+audit_table = f"{audit_catalog}.{audit_schema}.AgentActionLog"
 now_utc = datetime.now(timezone.utc)
 
 # COMMAND ----------
@@ -76,7 +76,6 @@ else:
             r.get("event_id"),
             r.get("job_id"),
             r.get("job_name"),
-            r.get("country_code"),
             r.get("run_id"),
             r.get("task_key"),
             r.get("failure_type"),
@@ -84,6 +83,7 @@ else:
             r.get("error_message"),
             float(r.get("confidence", 0.0)),
             r.get("recommended_action"),
+            r.get("fix_applied", "None"),
             r.get("action_tier"),
             bool(r.get("auto_execute", False)),
             r.get("final_status"),
@@ -103,18 +103,23 @@ else:
     except Exception:
         table_exists = False
 
-    if table_exists and _delta_available and DeltaTable.isDeltaTable(spark, audit_table):
-        dt = DeltaTable.forName(spark, audit_table)
-        (
-            dt.alias("tgt")
-            .merge(log_df.alias("src"), "tgt.EventId = src.EventId")
-            .whenNotMatchedInsertAll()
-            .execute()
-        )
-        print(f"[AuditLogger] Merged {len(log_rows)} row(s) into {audit_table}")
+    if table_exists and _delta_available:
+        try:
+            dt = DeltaTable.forName(spark, audit_table)
+            (
+                dt.alias("tgt")
+                .merge(log_df.alias("src"), "tgt.EventId = src.EventId")
+                .whenNotMatchedInsertAll()
+                .execute()
+            )
+            print(f"[AuditLogger] Merged {len(log_rows)} row(s) into {audit_table}")
+        except Exception as e:
+            print(f"[AuditLogger] WARNING: merge failed ({e}); falling back to append")
+            log_df.write.format("delta").mode("append").saveAsTable(audit_table)
+            print(f"[AuditLogger] Appended {len(log_rows)} row(s) to {audit_table}")
     else:
         log_df.write.format("delta").mode("append").saveAsTable(audit_table)
         print(f"[AuditLogger] Appended {len(log_rows)} row(s) to {audit_table}")
 
     for r in execution_results:
-        print(f"  [{r.get('final_status'):<28}] [{r.get('country_code')}] {r.get('job_name')}  EventId={r.get('event_id')}")
+        print(f"  [{r.get('final_status'):<28}] {r.get('job_name')}  EventId={r.get('event_id')}")

@@ -35,6 +35,7 @@ import os
 from openai import OpenAI
 
 # COMMAND ----------
+
 # Connect to Databricks-hosted model serving — same pattern as Manual_File_Agent.py
 # Token is pulled from the cluster context automatically; no secret needed.
 
@@ -55,6 +56,7 @@ Analyse the provided job failure context and return a JSON object with exactly t
 - confidence: float between 0.0 and 1.0
 - recommended_action: one of RERUN, ALERT_ONLY
 - rationale: one concise sentence explaining the classification
+- code_fix_description: concise, actionable fix text for NotebookPatcher, or null if no code edit is needed
 
 Classification rules:
 TRANSIENT    = cluster terminated unexpectedly, timeout, OOM, driver restart, spark context lost
@@ -66,9 +68,55 @@ CONFIG_ERROR = missing table, permission denied, secret not found, invalid param
 UNKNOWN      = cannot determine from available information
                → recommended_action: ALERT_ONLY
 
+code_fix_description rules:
+- Populate it only when failure_type is DATA_ERROR or CONFIG_ERROR and the issue needs a code-level fix.
+- Keep it short and directly actionable.
+- For undefined variable errors, tell NotebookPatcher what variable initialisation or fallback to add.
+- Use null for TRANSIENT or UNKNOWN.
+
+
 Respond with valid JSON only. No markdown fences, no explanation outside the JSON."""
 
 # COMMAND ----------
+
+def _derive_code_fix_description(error_message, failure_type, rationale):
+    """Create a short patch instruction when the LLM does not return one."""
+    if failure_type not in ("DATA_ERROR", "CONFIG_ERROR"):
+        return None
+
+    message = "" if error_message is None else str(error_message)
+    message_lower = message.lower()
+
+    name_error_match = re.search(r"name '([^']+)' is not defined", message, re.IGNORECASE)
+    if name_error_match:
+        variable_name = name_error_match.group(1)
+        return (
+            f"Initialize {variable_name} before first use, preferably from workflow parameters or a safe default, "
+            f"so the notebook does not raise NameError."
+        )
+
+    if "not defined" in message_lower:
+        return (
+            "Initialize the missing variable before first use, sourcing it from workflow parameters or a safe default."
+        )
+
+    if "missing" in message_lower and "parameter" in message_lower:
+        return (
+            "Read the missing parameter from workflow inputs before it is referenced, and fail fast with a clear error if it is absent."
+        )
+
+    if "permission" in message_lower:
+        return (
+            "Use the configured secret or connection setting before the failing access, and surface a clear configuration error if permissions are missing."
+        )
+
+    if "table" in message_lower and ("not found" in message_lower or "does not exist" in message_lower):
+        return (
+            "Verify the source table name is resolved from configuration before use, and guard the lookup with a clear missing-table check."
+        )
+
+    return rationale if rationale else "Apply the minimal code/configuration fix needed to resolve the failure."
+
 
 def classify_failure(job_name, termination_code, error_message):
     """
@@ -81,7 +129,8 @@ def classify_failure(job_name, termination_code, error_message):
             "failure_type": "UNKNOWN",
             "confidence": 0.0,
             "recommended_action": "ALERT_ONLY",
-            "rationale": "LLM client not initialised — token unavailable."
+            "rationale": "LLM client not initialised — token unavailable.",
+            "code_fix_description": None
         }
 
     user_message = (
@@ -115,6 +164,28 @@ def classify_failure(job_name, termination_code, error_message):
             raise ValueError(f"LLM response missing keys: {missing}")
 
         result["confidence"] = float(result["confidence"])
+
+        if "code_fix_description" not in result:
+            result["code_fix_description"] = None
+        else:
+            result["code_fix_description"] = (
+                str(result["code_fix_description"]).strip() or None
+                if result["code_fix_description"] is not None
+                else None
+            )
+
+        if result["failure_type"] not in ("DATA_ERROR", "CONFIG_ERROR"):
+            result["code_fix_description"] = None
+        elif not result["code_fix_description"]:
+            result["code_fix_description"] = _derive_code_fix_description(
+                error_message=error_message,
+                failure_type=result["failure_type"],
+                rationale=result.get("rationale", "")
+            )
+
+        if not isinstance(result, dict):
+            raise TypeError(f"LLM classification did not return a mapping: {type(result)!r}")
+
         return result
 
     except Exception as e:
@@ -123,7 +194,8 @@ def classify_failure(job_name, termination_code, error_message):
             "failure_type": "UNKNOWN",
             "confidence": 0.0,
             "recommended_action": "ALERT_ONLY",
-            "rationale": f"LLM classification unavailable: {str(e)}"
+            "rationale": f"LLM classification unavailable: {str(e)}",
+            "code_fix_description": None
         }
 
 # COMMAND ----------

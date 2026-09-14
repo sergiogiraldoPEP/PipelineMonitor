@@ -44,6 +44,7 @@ lookback_min = policy.get("polling_lookback_minutes", 15)
 audit_table = f"{audit_catalog}.{audit_schema}.{audit_table_name}"
 
 # COMMAND ----------
+
 # Step 1 — Find failed runs using the requested mode
 
 from datetime import datetime, timedelta
@@ -136,22 +137,28 @@ else:
 failed_runs_df = spark.createDataFrame(failed_runs_data).dropDuplicates(["run_id"]) if failed_runs_data else spark.createDataFrame([], schema="job_id long, run_id long, result_state string, termination_code string, period_end_time long, trigger_type string, run_name string, task_key string, task_error_context string")
 
 # COMMAND ----------
-# Step 2 — Anti-join against already-handled runs to avoid reprocessing
 
-try:
-    handled_df = spark.sql(f"SELECT DISTINCT RunId FROM {audit_table}")
-    new_failures_df = failed_runs_df.join(
-        handled_df,
-        failed_runs_df.run_id == handled_df.RunId,
-        "left_anti"
-    )
-except Exception:
-    # AgentActionLog does not exist yet (first run) — treat all failures as new
+# Step 2 — Avoid duplicate processing during scheduled scans
+
+if run_id:
+    # Explicit run_id mode is for reassessment/testing, so process it even if logged before.
     new_failures_df = failed_runs_df
+else:
+    try:
+        handled_df = spark.sql(f"SELECT DISTINCT RunId FROM {audit_table}")
+        new_failures_df = failed_runs_df.join(
+            handled_df,
+            failed_runs_df.run_id == handled_df.RunId,
+            "left_anti"
+        )
+    except Exception:
+        # AgentActionLog does not exist yet (first run) — treat all failures as new
+        new_failures_df = failed_runs_df
 
 new_failures = new_failures_df.collect()
 
 # COMMAND ----------
+
 # Step 3 — Enrich each failure with job name and error message from Jobs API
 
 detected_failures = []

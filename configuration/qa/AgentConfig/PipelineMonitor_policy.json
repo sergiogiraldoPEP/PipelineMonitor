@@ -1,0 +1,25 @@
+{
+  "confidence_threshold": 0.70,
+  "max_auto_reruns_per_job_per_day": 3,
+  "polling_lookback_minutes": 15,
+  "safe_actions": ["RERUN"],
+  "llm_model": "databricks-gpt-5-2",
+  "audit_catalog": "uc_qa_snt_mosaic_01",
+ "audit_schema": "mosaic_audit",
+  "audit_table_name": "AgentActionLog",
+  "approval_table_name": "AgentApprovalQueue",
+  "notebook_patch_enabled": true,
+  "ado_org": "PepsiCoIT",
+  "ado_project": "Global_Data_Project",
+  "ado_repo": "cdo_mosaic",
+  "ado_base_branch": "main",
+  "ado_secret_scope": "mosaic-secrets",
+  "ado_secret_key": "ado-pat-pipeline-monitor",
+  "notebook_path_prefix_db": "/Mosaic/",
+  "notebook_path_prefix_repo": "databricks/",
+  "notebook_patch_inbox_enabled": true,
+  "notebook_patch_inbox_dir": "databricks/_self_heal_inbox",
+  "notebook_path_overrides": {
+        "/Users/jamesolajire.atose@pepsico.com/PipelineMonitor-LegalEntity-001-ETL": "databricks/common/Opex/LegalEntity-001-ETL.py"
+    }
+}

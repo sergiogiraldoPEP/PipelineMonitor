@@ -41,23 +41,26 @@
 
 # COMMAND ----------
 
-# MAGIC %md ### PreMosaicExecute
+# MAGIC %md
+# MAGIC ### PreMosaicExecute
 
 # COMMAND ----------
 
-# MAGIC %run /Mosaic/config/PreMosaicExecution
+# %run /Mosaic/config/PreMosaicExecution
 
 # COMMAND ----------
 
-# MAGIC %md ### Config notebook
+# MAGIC %md
+# MAGIC ### Config notebook
 
 # COMMAND ----------
 
-# MAGIC %run Mosaic/config/MosaicCommonParameterSetup
+# %run Mosaic/config/MosaicCommonParameterSetup
 
 # COMMAND ----------
 
-# MAGIC %md ### Imports
+# MAGIC %md
+# MAGIC ### Imports
 
 # COMMAND ----------
 
@@ -67,12 +70,13 @@ from datetime import datetime, timezone
 
 # COMMAND ----------
 
-# MAGIC %md ### Widget parameters
+# MAGIC %md
+# MAGIC ### Widget parameters
 
 # COMMAND ----------
 
-dbutils.widgets.text("env",      "dev",  "Environment (dev / qa / prod)")
-dbutils.widgets.text("dry_run",  "True", "Dry Run — True prevents any live reruns")
+dbutils.widgets.text("env",      "qa",  "Environment (dev / qa / prod)")
+dbutils.widgets.text("dry_run",  "False", "Dry Run — True prevents any live reruns")
 dbutils.widgets.text("run_id",   "",     "Run ID (optional targeted failure run)")
 
 env      = dbutils.widgets.get("env").strip().lower()
@@ -84,7 +88,8 @@ print(f"[PipelineMonitor] env={env}  dry_run={dry_run}  time={datetime.now(timez
 
 # COMMAND ----------
 
-# MAGIC %md ### Policy config
+# MAGIC %md
+# MAGIC ### Policy config
 
 # COMMAND ----------
 
@@ -121,11 +126,20 @@ print(f"[PipelineMonitor] Guardrails:   confidence≥{policy['confidence_thresho
 
 # COMMAND ----------
 
-# MAGIC %md ### Step 1 — Detect failures
+policy_file
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Step 1 — Detect failures
 
 # COMMAND ----------
 
 # MAGIC %run ./001-FailureDetector
+
+# COMMAND ----------
+
+new_failures_df.display()
 
 # COMMAND ----------
 
@@ -137,7 +151,12 @@ print(f"[PipelineMonitor] {len(detected_failures)} failure(s) to process")
 
 # COMMAND ----------
 
-# MAGIC %md ### Step 2 — Classify with LLM
+# MAGIC %md
+# MAGIC ### Step 2 — Classify with LLM
+
+# COMMAND ----------
+
+pip install openai
 
 # COMMAND ----------
 
@@ -145,7 +164,8 @@ print(f"[PipelineMonitor] {len(detected_failures)} failure(s) to process")
 
 # COMMAND ----------
 
-# MAGIC %md ### Step 3 — Apply guardrails
+# MAGIC %md
+# MAGIC ### Step 3 — Apply guardrails
 
 # COMMAND ----------
 
@@ -153,7 +173,8 @@ print(f"[PipelineMonitor] {len(detected_failures)} failure(s) to process")
 
 # COMMAND ----------
 
-# MAGIC %md ### Step 4 — Execute or queue approvals
+# MAGIC %md
+# MAGIC ### Step 4 — Execute or queue approvals
 
 # COMMAND ----------
 
@@ -161,7 +182,8 @@ print(f"[PipelineMonitor] {len(detected_failures)} failure(s) to process")
 
 # COMMAND ----------
 
-# MAGIC %md ### Step 5 — Write audit trail
+# MAGIC %md
+# MAGIC ### Step 5 — Write audit trail
 
 # COMMAND ----------
 
@@ -178,3 +200,14 @@ print(f"[PipelineMonitor] Reruns triggered:  {_auto}")
 print(f"[PipelineMonitor] Pending approval:  {_pending}")
 print(f"[PipelineMonitor] Blocked:           {_blocked}")
 print(f"[PipelineMonitor] Total processed:   {len(execution_results)}")
+
+# COMMAND ----------
+
+# MAGIC %run ./006-NotebookPatcher
+
+# COMMAND ----------
+
+policy.get("ado_project")
+
+# COMMAND ----------
+
